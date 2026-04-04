@@ -786,11 +786,11 @@ function configure_godot-engine() {
         local version_major="${version%%.*}"
 
         if [[ "$version_major" -ge 4 ]]; then
-            # Godot 4.x: auto-detects rendering driver, only needs main-pack and audio.
+            # Godot 4.x: auto-detects rendering driver, uses PulseAudio or ALSA.
             if isPlatform "x86" || isPlatform "x86_64"; then
-                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} --main-pack %ROM% --audio-driver SDL2 -f"
+                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} --main-pack %ROM% -f"
             else
-                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} --main-pack %ROM% --audio-driver SDL2 -f"
+                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} --main-pack %ROM% -f"
             fi
         elif [[ "$version" == "2.1.6" ]]; then
             audio_driver_string="-ad"
