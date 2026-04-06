@@ -46,6 +46,12 @@ GODOT_VERSIONS=(
     "3.5.2"
 )
 
+# Godot 4.x versions use official binaries (no FRT needed).
+# Requires 64-bit OS (aarch64 for ARM, x86_64 for PC).
+GODOT4_VERSIONS=(
+    "4.6.2"
+)
+
 AUDIO_DRIVERS=(
     "SDL2"
 )
@@ -641,6 +647,7 @@ function _install_update_scraper() {
 function sources_godot-engine() {
     local url="https://github.com/hiulit/RetroPie-Godot-Game-Engine-Emulator/releases/download/v${VERSION_MAJOR}.${VERSION_MINOR}.0"
 
+    # Download Godot 2.x/3.x binaries (FRT for ARM, official for x86).
     for version in "${GODOT_VERSIONS[@]}"; do
         if isPlatform "x86"; then
             downloadAndExtract "${url}/godot_${version}_x11_32.zip" "$md_build"
@@ -652,6 +659,22 @@ function sources_godot-engine() {
             downloadAndExtract "${url}/frt_${version}_pi1.zip" "$md_build"
         elif isPlatform "rpi2" || isPlatform "rpi3" || isPlatform "rpi4"; then
             downloadAndExtract "${url}/frt_${version}_pi2.zip" "$md_build"
+        fi
+    done
+
+    # Download Godot 4.x binaries (official builds, 64-bit only).
+    local godot4_url="https://github.com/godotengine/godot/releases/download"
+    for version in "${GODOT4_VERSIONS[@]}"; do
+        local godot4_release_url="${godot4_url}/${version}-stable"
+        if isPlatform "x86"; then
+            downloadAndExtract "${godot4_release_url}/Godot_v${version}-stable_linux.x86_32.zip" "$md_build"
+            mv "$md_build/Godot_v${version}-stable_linux.x86_32" "$md_build/godot_${version}_linux_x86_32"
+        elif isPlatform "x86_64"; then
+            downloadAndExtract "${godot4_release_url}/Godot_v${version}-stable_linux.x86_64.zip" "$md_build"
+            mv "$md_build/Godot_v${version}-stable_linux.x86_64" "$md_build/godot_${version}_linux_x86_64"
+        elif isPlatform "aarch64"; then
+            downloadAndExtract "${godot4_release_url}/Godot_v${version}-stable_linux.arm64.zip" "$md_build"
+            mv "$md_build/Godot_v${version}-stable_linux.arm64" "$md_build/godot_${version}_linux_arm64"
         fi
     done
 }
@@ -737,6 +760,9 @@ function configure_godot-engine() {
                 bin_files+=("$bin_file_tmp")
             fi
         done
+
+        # Sort so that Godot 4.x versions come after 3.x (last = default).
+        IFS=$'\n' bin_files=($(sort -V <<<"${bin_files[*]}")); unset IFS
     else
         echo "ERROR: Can't configure '$RP_MODULE_ID'." >&2
         echo "There must have been a problem installing the binaries." >&2
@@ -752,29 +778,50 @@ function configure_godot-engine() {
         [[ "$index" -eq "${#bin_files[@]}-1" ]] && default=1 # Default to the last item (greater version) in "bin_files".
         
         # Get the version from the file name.
+        # Binary names: frt_3.5.2_arm64, godot_3.5.2_x11_64, godot_4.6.2_linux_arm64
         version="${bin_files[$index]}"
-        # Cut between "_".
         version="$(echo $version | cut -d'_' -f 2)"
 
-        if [[ "$version" == "2.1.6" ]]; then
+        # Detect major version number.
+        local version_major="${version%%.*}"
+
+        if [[ "$version_major" -ge 4 ]]; then
+            # Godot 4.x: auto-detects rendering driver, uses PulseAudio or ALSA.
+            if isPlatform "x86" || isPlatform "x86_64"; then
+                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} --main-pack %ROM% -f"
+            else
+                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} --main-pack %ROM% -f"
+            fi
+        elif [[ "$version" == "2.1.6" ]]; then
             audio_driver_string="-ad"
             main_pack_string="-main_pack"
             video_driver_string="-vd"
+
+            if isPlatform "x86" || isPlatform "x86_64"; then
+                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} $main_pack_string %ROM% $audio_driver_string $AUDIO_DRIVER $video_driver_string $VIDEO_DRIVER -f"
+            else
+                local frt_keyboard_id_string=""
+                [[ -n "$FRT_KEYBOARD_ID" ]] && frt_keyboard_id_string="FRT_KEYBOARD_ID='$FRT_KEYBOARD_ID'"
+                local frt_kms_drm_device_string=""
+                [[ -n "$FRT_KMSDRM_DEVICE" ]] && frt_kms_drm_device_string="FRT_KMSDRM_DEVICE='$FRT_KMSDRM_DEVICE'"
+
+                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "FRT_EXIT_SHORTCUT=shift-enter $md_inst/${bin_files[$index]} $main_pack_string %ROM% $audio_driver_string $AUDIO_DRIVER $video_driver_string $VIDEO_DRIVER -f"
+            fi
         else
             audio_driver_string="--audio-driver"
             main_pack_string="--main-pack"
             video_driver_string="--video-driver"
-        fi
 
-        if isPlatform "x86" || isPlatform "x86_64"; then
-            addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} $main_pack_string %ROM% $audio_driver_string $AUDIO_DRIVER $video_driver_string $VIDEO_DRIVER -f"
-        else
-            local frt_keyboard_id_string=""
-            [[ -n "$FRT_KEYBOARD_ID" ]] && frt_keyboard_id_string="FRT_KEYBOARD_ID='$FRT_KEYBOARD_ID'"
-            local frt_kms_drm_device_string=""
-            [[ -n "$FRT_KMSDRM_DEVICE" ]] && frt_kms_drm_device_string="FRT_KMSDRM_DEVICE='$FRT_KMSDRM_DEVICE'"
+            if isPlatform "x86" || isPlatform "x86_64"; then
+                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} $main_pack_string %ROM% $audio_driver_string $AUDIO_DRIVER $video_driver_string $VIDEO_DRIVER -f"
+            else
+                local frt_keyboard_id_string=""
+                [[ -n "$FRT_KEYBOARD_ID" ]] && frt_keyboard_id_string="FRT_KEYBOARD_ID='$FRT_KEYBOARD_ID'"
+                local frt_kms_drm_device_string=""
+                [[ -n "$FRT_KMSDRM_DEVICE" ]] && frt_kms_drm_device_string="FRT_KMSDRM_DEVICE='$FRT_KMSDRM_DEVICE'"
 
-            addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "FRT_EXIT_SHORTCUT=shift-enter $md_inst/${bin_files[$index]} $main_pack_string %ROM% $audio_driver_string $AUDIO_DRIVER $video_driver_string $VIDEO_DRIVER -f"
+                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "FRT_EXIT_SHORTCUT=shift-enter $md_inst/${bin_files[$index]} $main_pack_string %ROM% $audio_driver_string $AUDIO_DRIVER $video_driver_string $VIDEO_DRIVER -f"
+            fi
         fi
     done
 
