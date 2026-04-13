@@ -790,7 +790,7 @@ function configure_godot-engine() {
             if isPlatform "x86" || isPlatform "x86_64"; then
                 addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} --main-pack %ROM% -f"
             else
-                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "$md_inst/${bin_files[$index]} --main-pack %ROM% -f"
+                addEmulator "$default" "$md_id-$version" "$RP_MODULE_ID" "sudo xinit $md_inst/${bin_files[$index]} --main-pack %ROM% -f -- :1"
             fi
         elif [[ "$version" == "2.1.6" ]]; then
             audio_driver_string="-ad"
